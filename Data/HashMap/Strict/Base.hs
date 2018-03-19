@@ -104,7 +104,8 @@ import qualified Data.HashMap.Base as HM
 import Data.HashMap.Base hiding (
     alter, alterF, adjust, fromList, fromListWith, insert, insertWith,
     differenceWith, intersectionWith, intersectionWithKey, map, mapWithKey,
-    mapMaybe, mapMaybeWithKey, singleton, update, unionWith, unionWithKey)
+    mapMaybe, mapMaybeWithKey, singleton, update, unionWith, unionWithKey,
+    traverseWithKey)
 import Data.HashMap.Unsafe (runST)
 #if MIN_VERSION_base(4,8,0)
 import Data.Functor.Identity
@@ -523,7 +524,19 @@ mapMaybe f = mapMaybeWithKey (const f)
 {-# INLINE mapMaybe #-}
 
 
--- TODO: Should we add a strict traverseWithKey?
+-- | /O(n)/ Transform this map by accumulating an Applicative result
+-- from every value.
+traverseWithKey :: Applicative f => (k -> v1 -> f v2) -> HashMap k v1
+                -> f (HashMap k v2)
+traverseWithKey f = go
+  where
+    go Empty                 = pure Empty
+    go (Leaf h (L k v))      = (\v -> v `seq` Leaf h (L k v)) <$> f k v
+    go (BitmapIndexed b ary) = BitmapIndexed b <$> A.traverse go ary
+    go (Full ary)            = Full <$> A.traverse go ary
+    go (Collision h ary)     =
+        Collision h <$> A.traverse (\ (L k v) -> (\v' -> v' `seq` L k v') <$> f k v) ary
+{-# INLINE traverseWithKey #-}
 
 ------------------------------------------------------------------------
 -- * Difference and intersection
